@@ -557,6 +557,150 @@ public struct ChatView<MessageContent: View, InputViewContent: View, MenuAction:
     }
 }
 
+// Equerry fork patch (backport of exyte/Chat PR #302, upstream 3.3.3):
+// the partial-template designated inits below moved here verbatim from
+// PartialTemplateSpecifications.swift. Swift 6.4 (Xcode 27) leaves the @State
+// "variable initialization expression" symbols undefined when the init that
+// uses them is declared in a different file from the @State properties, so
+// ChatView failed to link (swiftlang/swift#91700). Keep these inits in this
+// file. Drops on any rebase onto upstream >= 3.3.3.
+public extension ChatView where MessageContent == EmptyView {
+
+    init(messages: [Message],
+         chatType: ChatType = .conversation,
+         replyMode: ReplyMode = .quote,
+         didSendMessage: @escaping (DraftMessage) -> Void,
+         didUpdateAttachmentStatus: ((AttachmentUploadUpdate) -> Void)? = nil,
+         reactionDelegate: ReactionDelegate? = nil,
+         inputViewBuilder: @escaping InputViewBuilderClosure,
+         messageMenuAction: MessageMenuActionClosure?) {
+        self.type = chatType
+        self.didSendMessage = didSendMessage
+        self.didUpdateAttachmentStatus = didUpdateAttachmentStatus
+        self.reactionDelegate = reactionDelegate
+        self.sections = ChatView.mapMessages(messages, chatType: chatType, replyMode: replyMode)
+        self.ids = messages.map { $0.id }
+        self.inputViewBuilder = inputViewBuilder
+        self.messageMenuAction = messageMenuAction
+    }
+}
+
+public extension ChatView where InputViewContent == EmptyView {
+
+    init(messages: [Message],
+         chatType: ChatType = .conversation,
+         replyMode: ReplyMode = .quote,
+         didSendMessage: @escaping (DraftMessage) -> Void,
+         didUpdateAttachmentStatus: ((AttachmentUploadUpdate) -> Void)? = nil,
+         reactionDelegate: ReactionDelegate? = nil,
+         messageBuilder: @escaping MessageBuilderClosure,
+         messageMenuAction: MessageMenuActionClosure?) {
+        self.type = chatType
+        self.didSendMessage = didSendMessage
+        self.didUpdateAttachmentStatus = didUpdateAttachmentStatus
+        self.reactionDelegate = reactionDelegate
+        self.sections = ChatView.mapMessages(messages, chatType: chatType, replyMode: replyMode)
+        self.ids = messages.map { $0.id }
+        self.messageBuilder = messageBuilder
+        self.messageMenuAction = messageMenuAction
+    }
+}
+
+public extension ChatView where MenuAction == DefaultMessageMenuAction {
+
+    init(messages: [Message],
+         chatType: ChatType = .conversation,
+         replyMode: ReplyMode = .quote,
+         didSendMessage: @escaping (DraftMessage) -> Void,
+         didUpdateAttachmentStatus: ((AttachmentUploadUpdate) -> Void)? = nil,
+         reactionDelegate: ReactionDelegate? = nil,
+         messageBuilder: @escaping MessageBuilderClosure,
+         inputViewBuilder: @escaping InputViewBuilderClosure) {
+        self.type = chatType
+        self.didSendMessage = didSendMessage
+        self.didUpdateAttachmentStatus = didUpdateAttachmentStatus
+        self.reactionDelegate = reactionDelegate
+        self.sections = ChatView.mapMessages(messages, chatType: chatType, replyMode: replyMode)
+        self.ids = messages.map { $0.id }
+        self.messageBuilder = messageBuilder
+        self.inputViewBuilder = inputViewBuilder
+    }
+}
+
+public extension ChatView where MessageContent == EmptyView, InputViewContent == EmptyView {
+
+    init(messages: [Message],
+         chatType: ChatType = .conversation,
+         replyMode: ReplyMode = .quote,
+         didSendMessage: @escaping (DraftMessage) -> Void,
+         didUpdateAttachmentStatus: ((AttachmentUploadUpdate) -> Void)? = nil,
+         reactionDelegate: ReactionDelegate? = nil,
+         messageMenuAction: MessageMenuActionClosure?) {
+        self.type = chatType
+        self.didSendMessage = didSendMessage
+        self.didUpdateAttachmentStatus = didUpdateAttachmentStatus
+        self.reactionDelegate = reactionDelegate
+        self.sections = ChatView.mapMessages(messages, chatType: chatType, replyMode: replyMode)
+        self.ids = messages.map { $0.id }
+        self.messageMenuAction = messageMenuAction
+    }
+}
+
+public extension ChatView where InputViewContent == EmptyView, MenuAction == DefaultMessageMenuAction {
+
+    init(messages: [Message],
+         chatType: ChatType = .conversation,
+         replyMode: ReplyMode = .quote,
+         didSendMessage: @escaping (DraftMessage) -> Void,
+         didUpdateAttachmentStatus: ((AttachmentUploadUpdate) -> Void)? = nil,
+         reactionDelegate: ReactionDelegate? = nil,
+         messageBuilder: @escaping MessageBuilderClosure) {
+        self.type = chatType
+        self.didSendMessage = didSendMessage
+        self.didUpdateAttachmentStatus = didUpdateAttachmentStatus
+        self.reactionDelegate = reactionDelegate
+        self.sections = ChatView.mapMessages(messages, chatType: chatType, replyMode: replyMode)
+        self.ids = messages.map { $0.id }
+        self.messageBuilder = messageBuilder
+    }
+}
+
+public extension ChatView where MessageContent == EmptyView, MenuAction == DefaultMessageMenuAction {
+
+    init(messages: [Message],
+         chatType: ChatType = .conversation,
+         replyMode: ReplyMode = .quote,
+         didSendMessage: @escaping (DraftMessage) -> Void,
+         didUpdateAttachmentStatus: ((AttachmentUploadUpdate) -> Void)? = nil,
+         reactionDelegate: ReactionDelegate? = nil,
+         inputViewBuilder: @escaping InputViewBuilderClosure) {
+        self.type = chatType
+        self.didSendMessage = didSendMessage
+        self.didUpdateAttachmentStatus = didUpdateAttachmentStatus
+        self.reactionDelegate = reactionDelegate
+        self.sections = ChatView.mapMessages(messages, chatType: chatType, replyMode: replyMode)
+        self.ids = messages.map { $0.id }
+        self.inputViewBuilder = inputViewBuilder
+    }
+}
+
+public extension ChatView where MessageContent == EmptyView, InputViewContent == EmptyView, MenuAction == DefaultMessageMenuAction {
+
+    init(messages: [Message],
+         chatType: ChatType = .conversation,
+         replyMode: ReplyMode = .quote,
+         didSendMessage: @escaping (DraftMessage) -> Void,
+         didUpdateAttachmentStatus: ((AttachmentUploadUpdate) -> Void)? = nil,
+         reactionDelegate: ReactionDelegate? = nil) {
+        self.type = chatType
+        self.didSendMessage = didSendMessage
+        self.didUpdateAttachmentStatus = didUpdateAttachmentStatus
+        self.reactionDelegate = reactionDelegate
+        self.sections = ChatView.mapMessages(messages, chatType: chatType, replyMode: replyMode)
+        self.ids = messages.map { $0.id }
+    }
+}
+
 public extension ChatView {
     
     func betweenListAndInputViewBuilder<V: View>(_ builder: @escaping ()->V) -> ChatView {
