@@ -23,6 +23,7 @@ struct MessageMenu<MainButton: View, ActionEnum: MessageMenuAction>: View {
 
     @Environment(\.chatTheme) private var theme
     @Environment(\.dismiss) var dismiss
+    @Environment(\.displayScale) private var displayScale
     
     @StateObject private var keyboardState = KeyboardState()
     @StateObject var viewModel: ChatViewModel
@@ -30,6 +31,7 @@ struct MessageMenu<MainButton: View, ActionEnum: MessageMenuAction>: View {
     @Binding var isShowingMenu: Bool
     
     /// Overall ChatView Frame
+    /// - Note: Equerry fork patch #11: only the vertical layout reads this now; the horizontal layout reads `rowFrame`.
     let chatViewFrame: CGRect = UIScreen.main.bounds
     
     /// The max height for the menu
@@ -68,9 +70,6 @@ struct MessageMenu<MainButton: View, ActionEnum: MessageMenuAction>: View {
     /// The vertical offset necessary to ensure the message, and it's surrounding components,
     /// are visible on screen, and within the vertical safeAreaInsets.
     @State private var verticalOffset: CGFloat = 0
-    /// The horizontal offset necessary to ensure the message, and it's surrounding components,
-    /// are visible on screen, and within the horizontal safeAreaInsets.
-    @State private var horizontalOffset: CGFloat = 0
     /// Used to store the previous `verticalOffset` when launching the emoji keyboard
     @State private var lastVerticalOffset: CGFloat = 0
     
@@ -117,6 +116,28 @@ struct MessageMenu<MainButton: View, ActionEnum: MessageMenuAction>: View {
         dismissSelf(rt)
     }
     
+    /// Equerry fork patch #11 (local): the frame, in global coordinates, the message row and its menu are laid out in
+    /// horizontally.
+    ///
+    /// Upstream laid them out across the whole screen (`UIScreen.main.bounds`, minus the horizontal safe area in
+    /// landscape). That matches the row only while the chat fills the screen's width. When the chat is narrower — the
+    /// detail pane of a split view, or a chat centred at a readable width — the long-pressed message was redrawn at the
+    /// screen's leading edge instead of over itself. The row's own frame, `cellFrame` (measured by
+    /// `MessageMenuPreferenceViewSetter`, the same frame the vertical layout already reads), is where the row sits.
+    /// When the chat fills the screen it equals the upstream band, so the menu lands exactly where it did.
+    /// The edges are snapped to the pixel grid: the measured frame carries float noise from the rotated cell
+    /// (402.00000000000011 for a 402 pt row), enough to move a line of text by a pixel.
+    private var rowFrame: CGRect {
+        guard cellFrame.width > 0 else {
+            // Not measured (never expected: the row was just long-pressed): fall back to the upstream band.
+            let safeArea = UIApplication.safeArea
+            return CGRect(x: safeArea.leading, y: 0, width: chatViewFrame.width - safeArea.leading - safeArea.trailing, height: chatViewFrame.height)
+        }
+        let minX = (cellFrame.minX * displayScale).rounded() / displayScale
+        let maxX = (cellFrame.maxX * displayScale).rounded() / displayScale
+        return CGRect(x: minX, y: cellFrame.minY, width: maxX - minX, height: cellFrame.height)
+    }
+
     /// The max height for the entire message menu and surrounding views
     var maxEntireHeight: CGFloat {
         self.chatViewFrame.height
@@ -169,8 +190,9 @@ struct MessageMenu<MainButton: View, ActionEnum: MessageMenuAction>: View {
             
             // The message and menu view
             messageMenuView()
+                .frame(width: rowFrame.width)
                 .frameGetter($messageMenuFrame)
-                .position(x: chatViewFrame.width / 2 + horizontalOffset, y: verticalOffset)
+                .position(x: rowFrame.midX, y: verticalOffset)
                 .opacity(messageMenuOpacity)
             
         }
@@ -249,17 +271,8 @@ struct MessageMenu<MainButton: View, ActionEnum: MessageMenuAction>: View {
                 viewModel.messageFrame = cellFrame
             }
             
-            /// If we're in landscape mode, adjust the `horizontalOffset` appropriately
-            if UIScreen.main.bounds.width > UIScreen.main.bounds.height {
-                switch alignment {
-                case .left:
-                    horizontalOffset = UIApplication.safeArea.leading
-                case .right:
-                    horizontalOffset = -UIApplication.safeArea.trailing
-                }
-            }
             messageFrame = .init(
-                x: viewModel.messageFrame.origin.x + horizontalOffset,
+                x: viewModel.messageFrame.origin.x,
                 y: cellFrame.maxY - (viewModel.messageFrame.height),
                 width: viewModel.messageFrame.width,
                 height: viewModel.messageFrame.height
@@ -475,8 +488,7 @@ struct MessageMenu<MainButton: View, ActionEnum: MessageMenuAction>: View {
             }
             
             mainButton()
-                .frame(maxWidth: chatViewFrame.width - UIApplication.safeArea.leading - UIApplication.safeArea.trailing)
-                .offset(x: (alignment == .right) ? UIApplication.safeArea.trailing : -UIApplication.safeArea.leading)
+                .frame(maxWidth: rowFrame.width)
                 .allowsHitTesting(false)
             
             if menuIsVisible {
