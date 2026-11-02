@@ -143,6 +143,15 @@ struct UIList<MessageContent: View, InputView: View>: UIViewRepresentable {
             }
         }
 
+        // Latest update wins. Each update below queues its own task, and
+        // UpdateQueue does not run them in order, so a queued update must apply
+        // the newest sections rather than the ones it captured: an older
+        // snapshot landing last would remove rows that already arrived, with
+        // nothing to restore them until the next view update. Stored before the
+        // early return, so returning to the applied state also supersedes
+        // whatever is still queued.
+        context.coordinator.newestSections = sections
+
         if context.coordinator.sections == sections {
             return
         }
@@ -156,6 +165,8 @@ struct UIList<MessageContent: View, InputView: View>: UIViewRepresentable {
 
     @MainActor
     private func updateIfNeeded(coordinator: Coordinator, tableView: UITableView) async {
+        let sections = coordinator.newestSections
+
         if coordinator.sections == sections {
             return
         }
@@ -179,8 +190,20 @@ struct UIList<MessageContent: View, InputView: View>: UIViewRepresentable {
         //print("0 whole sections:", runID, "\n")
         //print("whole previous:\n", formatSections(prevSections), "\n")
         let splitInfo = await performSplitInBackground(prevSections, sections)
-        await applyUpdatesToTable(tableView, splitInfo: splitInfo) {
+        await applyUpdatesToTable(tableView, sections: sections, splitInfo: splitInfo) {
             coordinator.sections = $0
+        }
+
+        // A newer update that matched the sections still being replaced returned
+        // early in updateUIView, so nothing is queued for it. Queue one rather than
+        // recursing: this run ends and gives up the queue, and any waiter that wins
+        // it applies the newest sections.
+        if coordinator.sections != coordinator.newestSections {
+            Task {
+                await updateQueue.enqueue() {
+                    await updateIfNeeded(coordinator: coordinator, tableView: tableView)
+                }
+            }
         }
     }
 
@@ -194,7 +217,7 @@ struct UIList<MessageContent: View, InputView: View>: UIViewRepresentable {
     }
 
     @MainActor
-    private func applyUpdatesToTable(_ tableView: UITableView, splitInfo: SplitInfo, updateContextClosure: ([MessagesSection])->()) async {
+    private func applyUpdatesToTable(_ tableView: UITableView, sections: [MessagesSection], splitInfo: SplitInfo, updateContextClosure: ([MessagesSection])->()) async {
         // step 0: preparation
         // prepare intermediate sections and operations
         //print("whole appliedDeletes:\n", formatSections(splitInfo.appliedDeletes), "\n")
@@ -491,6 +514,9 @@ struct UIList<MessageContent: View, InputView: View>: UIViewRepresentable {
         let showMessageTimeView: Bool
         let messageLinkPreviewLimit: Int
         let messageFont: UIFont
+        /// The sections of the latest `updateUIView`, which queued updates apply.
+        var newestSections: [MessagesSection] = []
+
         var sections: [MessagesSection] {
             didSet {
                 if let lastSection = sections.last {
